@@ -1,0 +1,101 @@
+---
+title: "Posterior problem with Sigma mixture prior"
+author: "Cory Lanker"
+date: "4/23/2017"
+version: "1.0"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(MASS)
+library(stats)
+library(plotrix)
+ellipse.ci <- function(dat, mat, p, col=2, lwd=2){
+	g=svd(mat)
+	d=atan(g$u[2,1]/g$u[2,2])*180/pi
+	q=qnorm(1-(1-p)/2)
+	draw.ellipse(dat[2],dat[1],
+		q*sqrt(pi/2*g$d[2]),q*sqrt(pi/2*g$d[1]),
+		angle=d, border=col, lwd=lwd)		
+}
+
+```
+
+## A potential problem with the posterior under some Sigma prior conditions
+
+When there is an overfit input Sigma including in the mixture,
+the likelihood and prior could have the same form for that collection
+of observations, and there won't be a prior for smoothing the posterior.
+This potentially complicates 
+
+1. prediction of new points, since there may be overfit regions
+where we would like a smoothed regression function,
+2. clustering data points in the training set, as points that
+should be in the same group are split due to the likelihood/prior
+fixation on the Sigma input prior that matches a subset of the points
+of that presumed single cluster.
+
+I'll only consider the impact of duplicate mixture covariance/sample covariance
+on prediction (#1 above)
+
+### Files used in these simulation study
+Files are found in ~/Dropbox/final/testing
+kmixfun_v36.R has the R functions (copied from/based on v35)
+Directory 'code' has the C functions
+These simulations evolved in files testrun170404.R and testrun170416.R
+
+## Problem Summary
+
+An instability exists in the program when there is an isolated grouping
+of observations that has its own input covariance matrix.
+The problem occurs when there is a cluster of those points in
+the Gibbs sampler with no other points. When this occurs:
+
+1. it is unlikely that other points will join the cluster,
+2. it is unlikely that the cluster points leave the cluster,
+3. the cluster mean will not change much
+4. the cluster covariance will not change at all
+5. the cluster proportion is unlikely to become small enough to affect 
+any of the above
+
+### Other points stay out of cluster
+
+### Group points stay in cluster
+
+### Cluster mean does not change
+
+### Cluster covariance does not change
+```{r covariance}
+X1 = mvrnorm(n=10, c(0,0,0), diag(3)*2)
+X2 = mvrnorm(n=10, c(0,0,0), diag(3) + .5)
+V1 = cov(X1); V2 = cov(X2)
+det(V1)
+det(V2)
+det(V1+V2)
+det(V1+V1)
+det(V2+V2)
+# Difference from Wishart draws
+I2 = solve(V2)/7
+solve(rWishart(1, 7, I2)[,,1])
+
+S2 = diag(3)
+S2[1,3]=S2[3,1]=10; S2[3,3]=150
+X2 = mvrnorm(n=10, c(0,0,0), S2)
+V2 = cov(X2)
+I2 = solve(V2)/7
+solve(rWishart(1, 7, I2)[,,1])
+
+```
+
+
+```{r contours}
+f = rWishart(1,10,diag(2)*9)[,,1]
+center=c(20,20)
+v = mvrnorm(n=1000, mu=center, Sigma=f)
+plot.new()
+plot(v[,2], v[,1],pch=1,cex=.67,asp=1,
+	xlim=range(v[,2])+c(-10,10),ylim=range(v[,1])+c(-10,10))
+ellipse.ci(v, f, .95, 'blue', 2)
+abline(h=-5:11*10,v=-5:11*10,lty=2)
+```

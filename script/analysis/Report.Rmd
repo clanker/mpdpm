@@ -1,0 +1,62 @@
+---
+title: "DPMG testing. V3: Tuning input covariance"
+author: "clanker"
+date: "11/27/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+setwd(here::here())
+source("script/pipeline/functions.R")
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE)
+```
+
+This repository is to test how the generic DPMG is performing as it will be used
+for comparison with the MPDPM method.
+
+There are 500 data sets generated with 4 MVN centroids at $(\pm 1, \pm 1)$ and
+response at $x_1\, x_2$. Here is the first seed:
+
+```{r}
+setwd(here::here())
+tibble::as_tibble(targets::tar_read(data_split)[[1]]$data) |>
+  ggplot(aes(x = x1, y = x2, color = y)) +
+  geom_point(alpha = 1/2)
+```
+
+Here are the results:
+```{r}
+setwd(here::here())
+# code to get difference between methods by seed
+differences <- targets::tar_read(model_fits) 
+differences <- differences |>
+  dplyr::select(seed, RMSE, numerator_diff) |> 
+  tidyr::spread("numerator_diff", "RMSE", "seed")
+p <- ncol(differences)
+differences <- differences |>
+  dplyr::mutate_at(2:p, as.numeric)
+differences
+```
+
+
+```{r}
+differences <- differences |>
+  dplyr::mutate_at(2:p, function(x) x - apply(differences[, 2:p], 1, min))
+differences
+```
+
+
+```{r}
+xval <- names(differences)[2:p] |> 
+  as.numeric()
+plot(x = NA, y = NA, xlim = range(xval), ylim = c(0, 0.1), 
+     xlab="numerator additive constant", ylab="Delta RMSE")
+for (i in 1:nrow(differences)) {
+  lines(xval, 
+        differences[i, 2:p], lwd=1/3)
+}
+```
+
+
+

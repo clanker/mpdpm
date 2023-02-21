@@ -1,0 +1,125 @@
+---
+title: "R Notebook version of 'Work 7-17 no 3.ipynb'"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Research: 2023
+
+## I need to simplify this process.
+
+For all research, let's ditch mclust and any direct empirical use of the data.
+The data should be standardized.
+All mixture covariance matrices should be scaled collections.
+
+* (1,1,1)  - smallest
+* (10,10,10)
+* (100,100,100) - empirical covariance matrix
+
+and all combinations of those (without correlation), that 3^(d+1) = 27 matrices for d=2.
+
+If d=8, then this is unmanageable, 3^9 = 19683 matrices. But we can reduce the number
+of covariance matrices by excluding any covariance matrices where 1 and 100 appear, which
+reduces that number to 1023 matrices.
+
+Note we could easily expand to three orders of magnitude and it would only cost
+another 2^9 = 512 matrices.
+
+If we add the possibility of correlation to each type, that simply doubles the number.
+
+## Then I need to show value compared to DPMG (BDA3 Chapter 23 mixture model).
+
+Confirm that DPMG is working would be nice. Can I construct cases where I know what
+the optimal score should be using DPMG?
+
+
+```{r setup}
+setwd(here::here())
+runcode = "./../c-code"
+#source("script/functions/kmixfun_v35.R")
+# Moved functions to :
+#source("script/functions/plot-functions.R")
+
+file_dir <- "script/functions/"
+file_list <- dir(file_dir)
+file_list <- file_list[grepl("R$", file_list)]
+purrr::walk(paste0(file_dir, file_list), source)
+```
+
+
+## Testcase 1.
+
+Define a testcase of a circle of points with two points at $(\pm1, 0)$. 
+
+
+### Strategy for this testcase:
+
+1. run MPDPM as is (poor results)
+2. but... if you provide middle points in a $S_l$, you get strong results (regression surface too sharp)
+3. solution: adding a 1/2 point smoother term for all $S_l$ smoothes the regression surface
+  
+```{r}
+# Testcase: Circle testcase (X1 = data) 
+rx = seq(pi/12,2*pi,pi/6)
+X1 = cbind(5*sin(rx),5*cos(rx),0)
+X1 = rbind(X1, c(1,0,5), c(-1,0,-5))  
+# W1 = test mesh
+xs = seq(-6,6,len = 20*6+1); L = length(xs)
+W1 = cbind(rep(xs,L),rep(xs,each=L),0)
+# compute E[Y|X] for T1 = truth, an oracle function
+T1 = rep(0, nrow(W1))
+for (i in 1:nrow(W1)){
+  d = sqrt(colSums((t(X1[,-3])-W1[i,-3])^2))
+  temp = dnorm(d, 0, sd = 1)
+  T1[i] = weighted.mean(X1[,3], w=temp)  
+}
+# inject noise here
+set.seed(0); X1[,3] = X1[,3] + rnorm(nrow(X1),0,0.1) # first try
+train = X1
+nclust = 10
+```
+
+
+```{r}
+# First run. (With mclust, will skip this in future)
+outcov <- run.mclust_v3(X1, sampsize=nrow(X1), seedno=NULL, cmax=15, cmin=1, printlevel=2, noIflag=T)
+S1 = outcov$mat
+wl1 = rep(1, dim(S1)[3])
+obs1 = round(outcov$obs,2)
+obs1[obs1 == 1] = 0
+```
+
+
+```{r}
+# note obs=obs*1000
+outB1 <- MPDPM(X1, S1, obs=obs1*1000, wl1, n=nclust, Burn=100, J=200, Thin=10, rho=NULL, 
+             a=1, b=1, seed="patrick", iterprint=1000, printlevel=2, 
+             so.dir=runcode, so.file=NULL, Xtest=W1, yind=3, out.type=4)
+
+plotsize(8, 8)
+get.rmse(y = T1, yhat = outB1, X1, xs)
+```
+
+```{r}
+S11 <- S1[, , 1]/100
+outD1 <- DPMG(X1, S11, wl=wl1[1], n=nclust, Burn=100, J=200, Thin=10, rho=NULL, 
+             a=1, b=1, seed="patrick", iterprint=1000, printlevel=2, 
+             so.dir=runcode, so.file=NULL, Xtest=W1, yind=3, out.type=4)
+
+plotsize(8, 8)
+get.rmse(y = T1, yhat = outD1, X1, xs)
+```
+
+Note: DPMG should perform competitively with MPDPM in this case as the constituent Gaussians
+have very similar covariance matrices, and we can select that covariance for the sole input
+matrix for DPMG.
+
+1. Can I design a testcase where MPDPM is superior? Need different covariance matrices for
+the four groups. (Simply select these as the MPDPM input covariance matrices.)
+Can I show where MPDPM is better for this testcase? I can chose the average of these
+constituent Gaussian covariances as the input to DPMG.
+
+Then (A.) a plot showing how a "variation parameter" increases yields better MPDPM performance.
+and (B.) a plot showing how if we use generic covariance patterns for MPDPM what the results are
+(perhaps as a percentage of the optimal performance.)

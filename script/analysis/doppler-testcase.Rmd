@@ -1,0 +1,10 @@
+---
+title: "Doppler testcase to show functionality of the mixture prior"
+author: "Cory Lanker"
+date: "`r Sys.Date()`"
+---
+
+```{r setup}
+library(ggplot2)
+```
+
